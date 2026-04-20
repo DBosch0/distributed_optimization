@@ -3,7 +3,7 @@ use std::ops::Sub;
 use nalgebra as na;
 use rand::distr::{Bernoulli, Distribution};
 
-const EPS: f32 = 1e-5;
+const EPS: f64 = 1e-5;
 
 pub struct Graph {
     pub adjacency_matrix: na::DMatrix<i8>,
@@ -21,13 +21,13 @@ impl Graph {
         d.sub(&self.adjacency_matrix)
     }
 
-    pub fn weight_matrix(&self) -> na::DMatrix<f32> {
+    pub fn weight_matrix(&self) -> na::DMatrix<f64> {
         let d = self.degree_matrix();
         let m = d.max();
-        let tau = m as f32 + 1.0;
-        let lap = d.sub(&self.adjacency_matrix).cast::<f32>();
+        let tau = m as f64 + 1.0;
+        let lap = d.sub(&self.adjacency_matrix).cast::<f64>();
         let w = na::DMatrix::identity(lap.nrows(), lap.ncols()) - lap / tau;
-        let ones = na::DVector::from_element(w.ncols(), 1.0f32);
+        let ones = na::DVector::from_element(w.ncols(), 1.0f64);
         assert!(
             (&w - &w.transpose()).iter().all(|x| x.abs() < EPS),
             "W must be symmetric"

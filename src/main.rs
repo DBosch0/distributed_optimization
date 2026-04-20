@@ -5,29 +5,31 @@ mod objectives;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use atomic_float::AtomicF32;
+use atomic_float::AtomicF64;
 use nalgebra as na;
 
-use algorithms::{OptAlg, dgd::DGDNode};
+use algorithms::{OptAlg, dgd::DGDNode, extra::ExtraNode};
 use graph::generate_graph;
 use objectives::LeastSquares;
 
 fn main() {
-    let p = 4;
+    let p = 5;
     let n = 10;
     let graph = generate_graph(n, 0.5);
-    let x_0 = na::DVector::<f32>::zeros(p);
-    let x_true = na::DVector::from_element(p, 300.0);
+    let x_0 = na::DVector::<f64>::zeros(p);
+    let x_true = na::DVector::new_random(p);
     let objs = (0..n)
-        .map(|_| LeastSquares::new(n, p, 2, &x_true))
+        .map(|_| LeastSquares::new(n, p, 10, &x_true))
         .collect::<Vec<_>>();
 
-    let nodes = DGDNode::new(graph, objs, x_0, x_true, 0.5, |k, alpha| {
-        3.0 * alpha / (k as f32).powf(1.0 / 3.0)
-    });
+    // let nodes = DGDNode::new(graph, objs, x_0, x_true, 0.5, |k, alpha| {
+    //     3.0 * alpha / (k as f64).powf(1.0 / 3.0)
+    // });
+
+    let nodes = ExtraNode::new(graph, objs, x_0, x_true, 0.5);
 
     const ITERATIONS: usize = 3000;
-    let res: Arc<[AtomicF32]> = (0..=ITERATIONS).map(|_| AtomicF32::new(0.0)).collect();
+    let res: Arc<[AtomicF64]> = (0..=ITERATIONS).map(|_| AtomicF64::new(0.0)).collect();
 
     let mut handles = Vec::new();
     for mut node in nodes.into_iter() {
