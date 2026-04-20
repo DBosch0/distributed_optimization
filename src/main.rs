@@ -15,15 +15,15 @@ use objectives::LeastSquares;
 fn main() {
     let p = 5;
     let n = 10;
-    let graph = generate_graph(n, 0.5);
+    let graph = generate_graph(n, 0.8);
     let x_0 = na::DVector::<f64>::zeros(p);
     let x_true = na::DVector::new_random(p);
     let objs = (0..n)
-        .map(|_| LeastSquares::new(n, p, 10, &x_true))
+        .map(|_| LeastSquares::new(n, p, 100, &x_true))
         .collect::<Vec<_>>();
 
-    // let nodes = DGDNode::new(graph, objs, x_0, x_true, 0.5, |k, alpha| {
-    //     3.0 * alpha / (k as f64).powf(1.0 / 3.0)
+    // let nodes = DGDNode::new(graph, objs, x_0, x_true, 0.573, |k, alpha| {
+    //     5.0 * alpha / (k as f64).powf(1.0 / 3.0)
     // });
 
     let nodes = ExtraNode::new(graph, objs, x_0, x_true, 0.5);
@@ -48,8 +48,10 @@ fn main() {
     }
 
     let res0 = res[0].load(Ordering::Relaxed).sqrt();
-    for i in 1..res.len() {
-        let v = res[i].load(Ordering::Relaxed).sqrt() / res0;
-        println!("k: {i}, v: {v}");
-    }
+    dbg!(res0);
+    dbg!(res[res.len() - 1].load(Ordering::Relaxed).sqrt());
+    // for i in 1..res.len() {
+    //     let v = res[i].load(Ordering::Relaxed).sqrt() / res0;
+    //     println!("k: {i}, v: {v}");
+    // }
 }

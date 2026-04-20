@@ -9,9 +9,10 @@ pub trait ObjectiveFunction {
 
 #[derive(Debug)]
 pub struct LeastSquares {
-    n: usize,
-    p: usize,
-    m: na::DMatrix<f64>,
+    n: usize, //number of agents
+    m: usize, // number of samples per agent
+    p: usize, //dimension of samples
+    x: na::DMatrix<f64>,
     y: na::DVector<f64>,
 }
 
@@ -21,27 +22,29 @@ impl LeastSquares {
         let mut rng = rand::rng();
         let d = StandardNormal;
 
-        let mut m = na::DMatrix::<f64>::zeros(mi, p);
+        let mut x = na::DMatrix::<f64>::zeros(mi, p);
         let mut noise = na::DVector::<f64>::zeros(mi);
         for i in 0..mi {
             noise[i] = d.sample(&mut rng);
             for j in 0..p {
-                m[(i, j)] = d.sample(&mut rng);
+                x[(i, j)] = d.sample(&mut rng);
             }
         }
-        let y = &m * true_x + noise;
-        Self { n, p, m, y }
+        let y = &x * true_x / (p as f64).sqrt() + 0.1f64.sqrt() * noise;
+        Self { n, m: mi, p, x, y }
     }
 }
 
 impl ObjectiveFunction for LeastSquares {
     fn obj(&self, x: &na::DVector<f64>) -> f64 {
         assert_eq!(x.nrows(), self.p);
-        (&self.m * x - &self.y).norm_squared() / 2.0 / self.n as f64
+        (&self.x * x / (self.p as f64).sqrt() - &self.y).norm_squared() / 2.0 / (self.m) as f64
     }
 
     fn grad(&self, x: &na::DVector<f64>) -> na::DVector<f64> {
         assert_eq!(x.nrows(), self.p);
-        self.m.transpose() * (&self.m * x - &self.y) / self.n as f64
+        self.x.transpose() * (&self.x * x / (self.p as f64).sqrt() - &self.y)
+            / (self.m) as f64
+            / (self.p as f64).sqrt()
     }
 }

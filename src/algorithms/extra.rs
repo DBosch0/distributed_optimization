@@ -14,13 +14,14 @@ pub struct ExtraNode<O: ObjectiveFunction> {
     id: usize,
     obj: O,
     x: na::DVector<f64>,
-    x_prev: na::DVector<f64>,
+    // x_prev: Vec<na::DVector<f64>>,
     x_true: na::DVector<f64>,
     w: na::DVector<f64>,
     wtilde: na::DVector<f64>,
     k: usize,
     alpha: f64,
     grad_prev: na::DVector<f64>,
+    wtilde_sum_prev: na::DVector<f64>,
     send: Box<[mpsc::Sender<(usize, na::DVector<f64>)>]>,
     recv: mpsc::Receiver<(usize, na::DVector<f64>)>,
     sync: Arc<Barrier>,
@@ -39,11 +40,7 @@ impl<O: ObjectiveFunction> ExtraNode<O> {
         assert_eq!(objs.len(), n);
 
         let w = graph.weight_matrix();
-        let tmp = (0..n)
-            .map(|i| w[(i, i)])
-            .fold(f64::INFINITY, |a, b| a.min(b));
-        let tmp = (1. - 1e-1) / (1. - tmp);
-        let wtilde = tmp * &w + na::DMatrix::identity(n, n) * (1.0 - tmp);
+        let wtilde = (&w + na::DMatrix::identity(n, n)) / 2.0;
 
         let mut senders: Vec<Vec<mpsc::Sender<(usize, na::DVector<f64>)>>> = vec![Vec::new(); n];
         let mut receivers: Vec<mpsc::Receiver<(usize, na::DVector<f64>)>> = Vec::with_capacity(n);
@@ -71,14 +68,14 @@ impl<O: ObjectiveFunction> ExtraNode<O> {
                 id,
                 obj: objs.pop().expect("valid for all n"),
                 x: x_0.clone(),
-                x_prev: na::DVector::zeros(p),
+                // x_prev: vec![na::DVector::zeros(p); n],
                 x_true: x_true.clone(),
                 w: w.column(id).clone_owned(),
                 wtilde: wtilde.column(id).clone_owned(),
                 k: 0,
                 alpha,
                 grad_prev: na::DVector::zeros(p),
-                // prev_sum_wx: na::DVector::zeros(p),
+                wtilde_sum_prev: na::DVector::zeros(p),
                 send: senders.pop().expect("valid for n").into_boxed_slice(),
                 recv: receivers.pop().expect("valid for n"),
                 sync: Arc::clone(&sync),
@@ -100,27 +97,32 @@ impl<O: ObjectiveFunction> OptAlg for ExtraNode<O> {
 
         let grad = self.obj.grad(&self.x);
 
-        let new_x = if self.k == 1 {
+        let (new_x, new_w_tilde_sum) = if self.k == 1 {
             let mut new_x = self.w[self.id] * &self.x - self.alpha * &grad;
+            let mut new_w_tilde_sum = self.wtilde[self.id] * &self.x;
             for _ in 0..self.send.len() {
                 let (id, other_x) = self.recv.recv().expect("neighbors send");
-                assert_ne!(id, self.id);
-                new_x += self.w[id] * other_x;
+                new_x += self.w[id] * &other_x;
+                new_w_tilde_sum += self.wtilde[id] * &other_x
             }
-            new_x
+            (new_x, new_w_tilde_sum)
         } else {
             let mut new_x = (1.0 + self.w[self.id]) * &self.x
-                - self.wtilde[self.id] * &self.x_prev
+                - &self.wtilde_sum_prev
                 - self.alpha * (&grad - &self.grad_prev);
+            let mut new_w_tilde_sum = self.wtilde[self.id] * &self.x;
             for _ in 0..self.send.len() {
                 let (id, other_x) = self.recv.recv().expect("neighbors send");
-                assert_ne!(id, self.id);
-                new_x += self.w[id] * other_x - self.wtilde[id] * &self.x_prev;
+                new_x += self.w[id] * &other_x;
+                new_w_tilde_sum += self.wtilde[id] * &other_x
             }
-            new_x
+            (new_x, new_w_tilde_sum)
         };
 
-        self.x_prev = std::mem::replace(&mut self.x, new_x);
+        self.x = new_x;
+        self.wtilde_sum_prev = new_w_tilde_sum;
+        // self.x_prev = std::mem::replace(&mut self.x, new_x);
+        // self.x = new_x;
         self.grad_prev = grad;
         self.sync.wait();
     }
